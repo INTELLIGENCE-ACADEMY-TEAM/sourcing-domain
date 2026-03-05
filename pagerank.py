@@ -9,7 +9,13 @@ import os
 import requests
 
 API_URL = "https://openpagerank.com/api/v1.0/getPageRank"
-API_KEY = os.getenv("OPENPAGERANK_API_KEY")
+
+
+def _get_api_key():
+    key = os.getenv("OPENPAGERANK_API_KEY")
+    if not key:
+        raise ValueError("OPENPAGERANK_API_KEY not set in environment")
+    return key
 
 
 def check_pagerank(domains: list[str]) -> dict[str, dict]:
@@ -22,8 +28,6 @@ def check_pagerank(domains: list[str]) -> dict[str, dict]:
     Returns:
         Dict mapping domain → {page_rank, rank, status}
     """
-    if not API_KEY:
-        raise ValueError("OPENPAGERANK_API_KEY not set in environment")
 
     results = {}
 
@@ -43,7 +47,7 @@ def _fetch_batch(domains: list[str]) -> dict[str, dict]:
     resp = requests.get(
         API_URL,
         params=params,
-        headers={"API-OPR": API_KEY},
+        headers={"API-OPR": _get_api_key()},
         timeout=30,
     )
     resp.raise_for_status()

@@ -14,8 +14,11 @@ import socket
 import requests
 from unicodedata import normalize as unicode_normalize
 
-SERPER_API_KEY = os.getenv("SERPER_API_KEY")
-PAPPERS_API_KEY = os.getenv("PAPPERS_API_KEY")
+def _serper_key():
+    return os.getenv("SERPER_API_KEY")
+
+def _pappers_key():
+    return os.getenv("PAPPERS_API_KEY")
 
 TLDS = [".fr", ".com", ".io", ".tech", ".org", ".net"]
 
@@ -38,7 +41,7 @@ def find_domains(company: dict, use_serper: bool = True, use_pappers: bool = Tru
     seen = set()
 
     # Strategy 1: Pappers API (most reliable — gives actual website)
-    if use_pappers and PAPPERS_API_KEY and company.get("siren"):
+    if use_pappers and _pappers_key() and company.get("siren"):
         pappers_domains = _from_pappers(company["siren"])
         for d in pappers_domains:
             if d not in seen:
@@ -55,7 +58,7 @@ def find_domains(company: dict, use_serper: bool = True, use_pappers: bool = Tru
                 results.append({"domain": d, "source": "dns_probe", "resolves": True})
 
     # Strategy 3: Google search via Serper (if we found nothing yet)
-    if use_serper and SERPER_API_KEY and not results:
+    if use_serper and _serper_key() and not results:
         serper_domains = _from_serper(company["name"], company.get("city", ""))
         for d in serper_domains:
             if d not in seen:
@@ -104,11 +107,14 @@ def _generate_candidates(company_name: str) -> list[str]:
 
 def _dns_check(domain: str) -> bool:
     """Check if a domain resolves via DNS."""
+    # Skip domains with labels too long (max 63 chars per label, 253 total)
+    if len(domain) > 253 or any(len(part) > 63 for part in domain.split(".")):
+        return False
     try:
         socket.setdefaulttimeout(3)
         socket.getaddrinfo(domain, 80)
         return True
-    except (socket.gaierror, socket.timeout, OSError):
+    except (socket.gaierror, socket.timeout, OSError, UnicodeError):
         return False
 
 
@@ -117,7 +123,7 @@ def _from_pappers(siren: str) -> list[str]:
     try:
         resp = requests.get(
             "https://api.pappers.fr/v2/entreprise",
-            params={"api_token": PAPPERS_API_KEY, "siren": siren},
+            params={"api_token": _pappers_key(), "siren": siren},
             timeout=10,
         )
         if resp.status_code != 200:
@@ -157,7 +163,7 @@ def _from_serper(company_name: str, city: str = "") -> list[str]:
         resp = requests.post(
             "https://google.serper.dev/search",
             headers={
-                "X-API-KEY": SERPER_API_KEY,
+                "X-API-KEY": _serper_key(),
                 "Content-Type": "application/json",
             },
             json={"q": query, "gl": "fr", "hl": "fr", "num": 5},
