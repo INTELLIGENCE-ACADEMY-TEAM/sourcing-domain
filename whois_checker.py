@@ -3,7 +3,7 @@ WHOIS checker — check domain expiration and availability.
 """
 
 import whois
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def check_whois(domain: str) -> dict:
@@ -23,6 +23,9 @@ def check_whois(domain: str) -> dict:
 
         days_until = None
         if exp_date and isinstance(exp_date, datetime):
+            # Make both datetimes naive for comparison
+            if exp_date.tzinfo is not None:
+                exp_date = exp_date.replace(tzinfo=None)
             days_until = (exp_date - datetime.now()).days
 
         # Determine status
@@ -32,34 +35,26 @@ def check_whois(domain: str) -> dict:
             status = "expired"
         elif days_until is not None and days_until < 30:
             status = "expiring_soon"
+        elif days_until is not None and days_until < 90:
+            status = "expiring_3m"
         else:
             status = "active"
 
         return {
             "registered": bool(w.domain_name),
-            "expiration_date": exp_date.isoformat() if exp_date else None,
+            "expiration_date": exp_date.strftime("%Y-%m-%d") if isinstance(exp_date, datetime) else None,
             "registrar": w.registrar,
             "days_until_expiry": days_until,
             "status": status,
             "name_servers": w.name_servers if w.name_servers else [],
         }
-    except whois.parser.PywhoisError:
-        return {
-            "registered": False,
-            "expiration_date": None,
-            "registrar": None,
-            "days_until_expiry": None,
-            "status": "available",
-            "name_servers": [],
-        }
-    except Exception as e:
+    except Exception:
         return {
             "registered": None,
             "expiration_date": None,
             "registrar": None,
             "days_until_expiry": None,
-            "status": "error",
-            "error": str(e),
+            "status": "unknown",
             "name_servers": [],
         }
 
@@ -70,12 +65,3 @@ def batch_check_whois(domains: list[str]) -> dict[str, dict]:
     for domain in domains:
         results[domain] = check_whois(domain)
     return results
-
-
-if __name__ == "__main__":
-    from rich import print as rprint
-
-    test = ["google.com", "xyznotexist12345.fr", "expired-test-domain.com"]
-    for domain in test:
-        info = check_whois(domain)
-        rprint(f"  {domain}: {info['status']} — expires: {info['expiration_date']} — registrar: {info['registrar']}")
